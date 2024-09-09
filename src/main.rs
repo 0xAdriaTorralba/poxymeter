@@ -21,7 +21,7 @@ fn handle_live(oxdev: &HidDevice, mut queue: &mut CommandQueue) {
     // enable data streaming
     let mut enable_streaming = Vec::with_capacity(3);
     enable_streaming.push(CommandCode::LiveDataCommand.into());
-    enable_streaming.push(0x00); // also stream curve (ensures that the values arrive on time)
+    enable_streaming.push(0x01); // also stream curve (ensures that the values arrive on time)
     enable_streaming.push(calculate_checksum(&enable_streaming));
     send_to_oximeter(&oxdev, &enable_streaming)
         .expect("failed to enable streaming on oximeter");
@@ -35,25 +35,30 @@ fn handle_live(oxdev: &HidDevice, mut queue: &mut CommandQueue) {
             .expect("failed to receive live data");
 
         while let Some(command) = queue.dequeue_command() {
-            if is_checksum_ok(&command) {
+            // println!("command: {:?}", command);
+            if !is_checksum_ok(&command) {
                 // ignore it
+                println!("checksum error");
                 continue;
             }
-
             if command.len() < 2 {
                 // too short for our purposes
+                println!("too short");
                 continue;
             }
             if command[0] != CommandCode::LiveDataResponse.into() {
                 // not what we're looking for
+                println!("not live data");
                 continue;
             }
             if command[1] != 0x01 {
                 // not the current readings
+                println!("not current readings");
                 continue;
             }
             if command.len() < 8 {
                 // not the correct length for current readings
+                println!("not correct length");
                 continue;
             }
 
@@ -61,7 +66,7 @@ fn handle_live(oxdev: &HidDevice, mut queue: &mut CommandQueue) {
             let timestamp = Local::now();
             let pulse = command[3];
             let spo2 = command[4];
-            println!("{} {} {}", timestamp.format("%Y-%m-%d %H:%M:%S"), pulse, spo2);
+            println!("{}, {}, {}", timestamp.format("%Y-%m-%d %H:%M:%S"), pulse, spo2);
         }
 
         // send a keepalive every 8 messages
